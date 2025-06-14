@@ -7,13 +7,11 @@ import {
 import express from 'express';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import compression from 'compression';
 
 const serverDistFolder = dirname(fileURLToPath(import.meta.url));
 const browserDistFolder = resolve(serverDistFolder, '../browser');
 
 const app = express();
-app.use(compression());
 const angularApp = new AngularNodeAppEngine();
 
 /**
@@ -42,13 +40,20 @@ app.use(
 /**
  * Handle all other requests by rendering the Angular application.
  */
-app.use('/**', (req, res, next) => {
-  angularApp
-    .handle(req)
-    .then((response) =>
-      response ? writeResponseToNodeResponse(response, res) : next()
-    )
-    .catch(next);
+app.use('/**', async (req, res, next) => {
+  try {
+    const response = await angularApp.handle(req);
+
+    if (response) {
+      await writeResponseToNodeResponse(response, res);
+    } else {
+      console.warn(`⚠️ No SSR response for: ${req.url}`);
+      res.status(404).sendFile(resolve(browserDistFolder, 'index.html'));
+    }
+  } catch (err) {
+    console.error('❌ SSR ERROR:', err);
+    res.status(500).send('Internal Server Error');
+  }
 });
 
 /**
